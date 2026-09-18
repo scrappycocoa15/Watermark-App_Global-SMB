@@ -9,23 +9,231 @@ Org-chart hierarchy is hardcoded from the 2026 SMB quota file and used as the
 primary source for Market / Team / Leader assignments.
 """
 
-import os, sys, io, time, calendar, requests
-from datetime import date as _date
+import io, time, calendar, requests
+from datetime import date as _date, date
 import streamlit as st
 import pandas as pd
-from datetime import date
+from dateutil.relativedelta import relativedelta
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
-# ── Import core logic from deficit_calculator ─────────────────────────────────
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-if APP_DIR not in sys.path:
-    sys.path.insert(0, APP_DIR)
+# ─── Column constants ─────────────────────────────────────────────────────────
+SALES_ID_COL     = "18 Digit Account ID"
+SALES_AMOUNT_COL = "BMI Net New ARR (converted)"
+SALES_DATE_COL   = "Order Effective Date"
+SALES_OWNER_COL  = "Account Owner"
+SALES_NAME_COL   = "Account Name"
 
-from deficit_calculator import (
-    process_accounts, write_excel,
-    SALES_ID_COL, SALES_AMOUNT_COL, SALES_DATE_COL, SALES_OWNER_COL, SALES_NAME_COL,
-    TERMS_ID_COL, TERMS_AMOUNT_COL, TERMS_DATE_COL, TERMS_OWNER_COL, TERMS_NAME_COL,
-    CSES_OWNER_COL, CSES_MANAGER_COL, CSES_TEAM_COL,
-)
+TERMS_ID_COL     = "Account: 18 Digit Account ID"
+TERMS_AMOUNT_COL = "Total Lost Revenue (converted)"
+TERMS_DATE_COL   = "Billing End Date"
+TERMS_OWNER_COL  = "Account: Account Owner"
+TERMS_NAME_COL   = "Account: Account Name"
+
+# ─── Color palette ────────────────────────────────────────────────────────────
+_COL_HDR_BG   = "0070F2"
+_COL_HDR_FONT = "FFFFFF"
+_ALT_ROW      = "E1F4FF"
+_LEADER_BG    = "00144A"
+_REP_BG       = "4CB1FF"
+
+
+# ─── Core FIFO watermark logic ────────────────────────────────────────────────
+
+def _clear_date(effective_date):
+    return effective_date + relativedelta(months=6)
+
+
+def process_accounts(combined: pd.DataFrame) -> list:
+    combined = combined.sort_values(
+        ["account_id", "effective_date", "amount"],
+        ascending=[True, True, True]
+    ).reset_index(drop=True)
+
+    results = []
+    today   = pd.Timestamp(date.today())
+
+    for account_id, group in combined.groupby("account_id", sort=False):
+        last_row      = group.iloc[-1]
+        account_owner = last_row["account_owner"]
+        account_name  = last_row["account_name"]
+        deficits      = []
+
+        for _, row in group.iterrows():
+            trans_date = row["effective_date"]
+            amount     = float(row["amount"])
+            source     = row["source"]
+            deficits   = [d for d in deficits if trans_date <= d["clear_date"]]
+
+            if amount < 0:
+                deficits.append({
+                    "amount":     abs(amount),
+                    "eff_date":   trans_date,
+                    "clear_date": _clear_date(trans_date),
+                    "source":     source,
+                })
+            elif amount > 0:
+                remaining = amount
+                i = 0
+                while i < len(deficits) and remaining > 0:
+                    d = deficits[i]
+                    if remaining >= d["amount"]:
+                        remaining -= d["amount"]
+                        deficits.pop(i)
+                    else:
+                        d["amount"] -= remaining
+                        remaining = 0
+                        i += 1
+
+        deficits = [d for d in deficits if today <= d["clear_date"]]
+        results.append({
+            "account_owner": account_owner,
+            "account_name":  account_name,
+            "account_id":    account_id,
+            "deficits":      deficits,
+        })
+    return results
+
+
+# ─── Excel output helpers ─────────────────────────────────────────────────────
+
+def _deficit_col_headers(max_deficits: int) -> list:
+    headers = []
+    for n in range(1, max_deficits + 1):
+        headers += [
+            f"Deficit {n} Amount",
+            f"Deficit {n} Effective Date",
+            f"Deficit {n} Clears/Expires",
+            f"Deficit {n} Source",
+        ]
+    return headers
+
+
+def _write_col_header_row(ws, col_headers: list):
+    font  = Font(bold=True, color=_COL_HDR_FONT, name="Calibri", size=10)
+    fill  = PatternFill(start_color=_COL_HDR_BG, end_color=_COL_HDR_BG, fill_type="solid")
+    align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for ci, h in enumerate(col_headers, start=1):
+        c = ws.cell(row=1, column=ci, value=h)
+        c.font, c.fill, c.alignment = font, fill, align
+    ws.row_dimensions[1].height = 30
+
+
+def _write_group_header(ws, row: int, label: str, total_cols: int,
+                        bg: str, font_color: str = "FFFFFF",
+                        font_size: int = 11, indent: int = 0):
+    ws.merge_cells(start_row=row, start_column=1,
+                   end_row=row, end_column=total_cols)
+    prefix = "  " * indent
+    c = ws.cell(row=row, column=1, value=f"{prefix}{label}")
+    c.font      = Font(bold=True, color=font_color, name="Calibri", size=font_size)
+    c.fill      = PatternFill(start_color=bg, end_color=bg, fill_type="solid")
+    c.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[row].height = 18
+
+
+def _write_account_row(ws, row: int, rep_name: str,
+                       account_name: str, account_id: str,
+                       deficits: list, use_alt: bool):
+    alt_fill = (PatternFill(start_color=_ALT_ROW, end_color=_ALT_ROW, fill_type="solid")
+                if use_alt else None)
+
+    def _cell(col, value, num_fmt=None, h_align=None):
+        c = ws.cell(row=row, column=col, value=value)
+        if alt_fill:
+            c.fill = alt_fill
+        if num_fmt:
+            c.number_format = num_fmt
+        if h_align:
+            c.alignment = Alignment(horizontal=h_align)
+        return c
+
+    _cell(1, rep_name)
+    _cell(2, account_name)
+    _cell(3, account_id)
+    ci = 4
+    for d in deficits:
+        _cell(ci,   -round(d["amount"], 2), num_fmt='#,##0.00', h_align="right")
+        _cell(ci+1, d["eff_date"].date(),   num_fmt="MM/DD/YYYY", h_align="center")
+        _cell(ci+2, d["clear_date"].date(), num_fmt="MM/DD/YYYY", h_align="center")
+        _cell(ci+3, d["source"])
+        ci += 4
+
+
+def _autofit_freeze(ws):
+    for col in ws.columns:
+        max_len = max(
+            (len(str(cell.value)) if cell.value is not None else 0)
+            for cell in col
+        )
+        ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 45)
+    ws.freeze_panes = "A2"
+
+
+def _write_results_sheet(ws, df: pd.DataFrame):
+    hdr_font  = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+    hdr_fill  = PatternFill(start_color=_COL_HDR_BG, end_color=_COL_HDR_BG, fill_type="solid")
+    hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    alt_fill  = PatternFill(start_color=_ALT_ROW,    end_color=_ALT_ROW,    fill_type="solid")
+
+    for cell in ws[1]:
+        cell.font, cell.fill, cell.alignment = hdr_font, hdr_fill, hdr_align
+    ws.row_dimensions[1].height = 32
+
+    for row_idx in range(2, ws.max_row + 1):
+        if row_idx % 2 == 0:
+            for cell in ws[row_idx]:
+                cell.fill = alt_fill
+
+    for col in ws.iter_cols(min_row=2, max_row=ws.max_row):
+        hdr = ws.cell(1, col[0].column).value or ""
+        for cell in col:
+            if cell.value is None:
+                continue
+            if "Amount" in hdr:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+            elif any(k in hdr for k in ("Date", "Expires", "Clears")):
+                cell.number_format = "MM/DD/YYYY"
+                cell.alignment = Alignment(horizontal="center")
+
+    for col in ws.columns:
+        max_len = max(
+            (len(str(c.value)) if c.value is not None else 0) for c in col
+        )
+        ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 45)
+    ws.freeze_panes = "A2"
+
+
+def _build_results_df(results: list) -> pd.DataFrame:
+    rows = []
+    for r in results:
+        row = {
+            "Account Owner":       r["account_owner"],
+            "Account Name":        r["account_name"],
+            "18 Digit Account ID": r["account_id"],
+        }
+        for n, d in enumerate(r["deficits"], start=1):
+            row[f"Deficit {n} Amount"]         = -round(d["amount"], 2)
+            row[f"Deficit {n} Effective Date"] = d["eff_date"].date()
+            row[f"Deficit {n} Clears/Expires"] = d["clear_date"].date()
+            row[f"Deficit {n} Source"]         = d["source"]
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def write_excel(results: list, output_path):
+    """
+    Write Excel output.  Single Results sheet — no CSEs dependency.
+    output_path can be a file path string or a BytesIO buffer.
+    """
+    active       = [r for r in results if r["deficits"]]
+    df_results   = _build_results_df(active)
+
+    with pd.ExcelWriter(output_path, engine="openpyxl",
+                        date_format="MM/DD/YYYY") as writer:
+        df_results.to_excel(writer, index=False, sheet_name="Results")
+        _write_results_sheet(writer.sheets["Results"], df_results)
 
 SF_API_VERSION = "v59.0"
 
@@ -919,7 +1127,7 @@ if st.session_state.get("diag"):
                 with st.expander(f"Tier 2 chunk errors — {label} ({len(errs)} failed)"):
                     st.json(errs)
 
-        st.markdown("**Expected column names (from deficit_calculator.py)**")
+        st.markdown("**Expected column names**")
         exp_s = [SALES_ID_COL, SALES_AMOUNT_COL, SALES_DATE_COL, SALES_OWNER_COL, SALES_NAME_COL]
         exp_t = [TERMS_ID_COL, TERMS_AMOUNT_COL, TERMS_DATE_COL, TERMS_OWNER_COL, TERMS_NAME_COL]
         miss_s = [c for c in exp_s if c not in d["sales_cols"]]
