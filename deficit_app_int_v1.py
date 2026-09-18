@@ -344,12 +344,14 @@ _RAW_ORG = {
     "Hung Do"               : {"team": "Australia SMB Client Sales", "leader": "Peter Soukos", "market": "Australia"},
     # ── Australia — FLSM as account owner (leader = Market Leader) ────────────
     "Peter Soukos"          : {"team": "Australia SMB Client Sales", "leader": "Fabian Calle", "market": "Australia"},
+    # ── Salesforce name aliases (confirmed from live data) ────────────────────
+    # Quota file name       → Salesforce legal name
+    # "Alexa Parritt"       → "Alexandra Parritt"
+    "Alexandra Parritt"     : {"team": "UK SMB Client Sales Key",         "leader": "Katie Brown",   "market": "UK"},
+    # "Deanna Burgess"      → "Deanna Rota" (confirmed from live Salesforce data Sep 2026)
+    # Remove the line below if Deanna Rota is a different person from Deanna Burgess.
+    "Deanna Rota"           : {"team": "Canada SMB Client Sales Key",     "leader": "Lesley Nunes",  "market": "Canada"},
 }
-# NOTE: Salesforce stores legal/full names; add aliases below if a rep's
-# Salesforce name differs from the quota file (same pattern as the US app).
-# Example:
-#   "Izabella Krawczyk-Patel": {"team": "UK SMB Client Sales Strategic",
-#                                "leader": "Bret Edis", "market": "UK"},
 
 # Pre-build a lowercase-keyed lookup for fast, case-insensitive rep matching.
 _ORG_LOOKUP = {k.lower(): v for k, v in _RAW_ORG.items()}
@@ -916,13 +918,25 @@ def build_master_df(active: list, div_lookup: dict = None) -> pd.DataFrame:
 # Excel download helper
 # ─────────────────────────────────────────────────────────────────────────────
 
-def excel_bytes(results: list) -> bytes:
+def excel_bytes(results: list):
+    """
+    Returns (bytes, error_str).  bytes is None if generation failed.
+    Callers should check error_str before offering a download button.
+    """
     active = [r for r in results if r["deficits"]]
     if not active:
-        return b""
-    buf = io.BytesIO()
-    write_excel(results, buf)
-    return buf.getvalue()
+        return None, "No active deficits to export."
+    try:
+        buf = io.BytesIO()
+        write_excel(results, buf)
+        return buf.getvalue(), None
+    except ModuleNotFoundError:
+        return None, (
+            "Excel export requires **openpyxl**. "
+            "Ensure `requirements.txt` is committed to the repo root and redeploy."
+        )
+    except Exception as e:
+        return None, f"Excel generation failed: {e}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1365,7 +1379,7 @@ st.markdown("---")
 dl1, dl2, _ = st.columns([1.2, 1.2, 4])
 
 with dl1:
-    xls = excel_bytes(results)
+    xls, xls_err = excel_bytes(results)
     if xls:
         st.download_button(
             label="Download Full Excel",
@@ -1374,6 +1388,8 @@ with dl1:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
+    elif xls_err and "openpyxl" in xls_err:
+        st.warning(xls_err)
     else:
         st.button("Download Full Excel", disabled=True, use_container_width=True)
 
