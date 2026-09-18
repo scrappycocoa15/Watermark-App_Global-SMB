@@ -14,8 +14,8 @@ from datetime import date as _date, date
 import streamlit as st
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.utils import get_column_letter
+# openpyxl is imported lazily inside write_excel and helpers so the app
+# starts cleanly even if the package is still being installed by Streamlit Cloud.
 
 # ─── Column constants ─────────────────────────────────────────────────────────
 SALES_ID_COL     = "18 Digit Account ID"
@@ -110,6 +110,7 @@ def _deficit_col_headers(max_deficits: int) -> list:
 
 
 def _write_col_header_row(ws, col_headers: list):
+    from openpyxl.styles import Font, PatternFill, Alignment
     font  = Font(bold=True, color=_COL_HDR_FONT, name="Calibri", size=10)
     fill  = PatternFill(start_color=_COL_HDR_BG, end_color=_COL_HDR_BG, fill_type="solid")
     align = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -122,6 +123,7 @@ def _write_col_header_row(ws, col_headers: list):
 def _write_group_header(ws, row: int, label: str, total_cols: int,
                         bg: str, font_color: str = "FFFFFF",
                         font_size: int = 11, indent: int = 0):
+    from openpyxl.styles import Font, PatternFill, Alignment
     ws.merge_cells(start_row=row, start_column=1,
                    end_row=row, end_column=total_cols)
     prefix = "  " * indent
@@ -135,6 +137,7 @@ def _write_group_header(ws, row: int, label: str, total_cols: int,
 def _write_account_row(ws, row: int, rep_name: str,
                        account_name: str, account_id: str,
                        deficits: list, use_alt: bool):
+    from openpyxl.styles import PatternFill, Alignment
     alt_fill = (PatternFill(start_color=_ALT_ROW, end_color=_ALT_ROW, fill_type="solid")
                 if use_alt else None)
 
@@ -161,6 +164,7 @@ def _write_account_row(ws, row: int, rep_name: str,
 
 
 def _autofit_freeze(ws):
+    from openpyxl.utils import get_column_letter
     for col in ws.columns:
         max_len = max(
             (len(str(cell.value)) if cell.value is not None else 0)
@@ -171,6 +175,8 @@ def _autofit_freeze(ws):
 
 
 def _write_results_sheet(ws, df: pd.DataFrame):
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
     hdr_font  = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
     hdr_fill  = PatternFill(start_color=_COL_HDR_BG, end_color=_COL_HDR_BG, fill_type="solid")
     hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
