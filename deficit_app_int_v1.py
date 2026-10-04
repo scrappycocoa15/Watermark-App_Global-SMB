@@ -294,7 +294,6 @@ LEADER_META = {
     "Katie Brown"  : {"team": "UK SMB Client Sales Key",       "region": "UK Key",              "market": "UK"},
     # ── Canada ────────────────────────────────────────────────────────────────
     "Brian Veloso" : {"team": "Canada SMB Client Sales",       "region": "Canada",              "market": "Canada"},
-    "Lesley Nunes" : {"team": "Canada SMB Client Sales",       "region": "Canada",              "market": "Canada"},
     # ── Australia ─────────────────────────────────────────────────────────────
     "Fabian Calle" : {"team": "Australia SMB Client Sales",    "region": "Australia",           "market": "Australia"},
     "Peter Soukos" : {"team": "Australia SMB Client Sales",    "region": "Australia",           "market": "Australia"},
@@ -324,15 +323,15 @@ _RAW_ORG = {
     "Bret Edis"             : {"team": "UK SMB Client Sales Strategic", "leader": "Adam Bazeley","market": "UK"},
     "Katie Brown"           : {"team": "UK SMB Client Sales Key",       "leader": "Adam Bazeley","market": "UK"},
 
-    # ── Canada — all CSE reps (under Lesley Nunes) ────────────────────────────
-    "Brad Holder"           : {"team": "Canada SMB Client Sales Premier",   "leader": "Lesley Nunes", "market": "Canada"},
-    "Chelsea Salonek"       : {"team": "Canada SMB Client Sales Premier",   "leader": "Lesley Nunes", "market": "Canada"},
-    "Carol Murray"          : {"team": "Canada SMB Client Sales Strategic", "leader": "Lesley Nunes", "market": "Canada"},
-    "Cristian Kawa"         : {"team": "Canada SMB Client Sales Strategic", "leader": "Lesley Nunes", "market": "Canada"},
-    "Hannah Peach"          : {"team": "Canada SMB Client Sales Strategic", "leader": "Lesley Nunes", "market": "Canada"},
-    "Tyler Witt"            : {"team": "Canada SMB Client Sales Key",       "leader": "Lesley Nunes", "market": "Canada"},
-    "Deanna Burgess"        : {"team": "Canada SMB Client Sales Key",       "leader": "Lesley Nunes", "market": "Canada"},
-    # ── Canada — FLSM as account owner (leader = Market Leader) ──────────────
+    # ── Canada — all CSE reps (under Brian Veloso) ───────────────────────────
+    "Brad Holder"           : {"team": "Canada SMB Client Sales Premier",   "leader": "Brian Veloso", "market": "Canada"},
+    "Chelsea Salonek"       : {"team": "Canada SMB Client Sales Premier",   "leader": "Brian Veloso", "market": "Canada"},
+    "Carol Murray"          : {"team": "Canada SMB Client Sales Strategic", "leader": "Brian Veloso", "market": "Canada"},
+    "Cristian Kawa"         : {"team": "Canada SMB Client Sales Strategic", "leader": "Brian Veloso", "market": "Canada"},
+    "Hannah Peach"          : {"team": "Canada SMB Client Sales Strategic", "leader": "Brian Veloso", "market": "Canada"},
+    "Tyler Witt"            : {"team": "Canada SMB Client Sales Key",       "leader": "Brian Veloso", "market": "Canada"},
+    "Deanna Burgess"        : {"team": "Canada SMB Client Sales Key",       "leader": "Brian Veloso", "market": "Canada"},
+    # ── Lesley Nunes — kept as account owner entry in case she holds accounts
     "Lesley Nunes"          : {"team": "Canada SMB Client Sales",           "leader": "Brian Veloso", "market": "Canada"},
 
     # ── Australia — all CSE reps (under Peter Soukos) ─────────────────────────
@@ -350,7 +349,7 @@ _RAW_ORG = {
     "Alexandra Parritt"     : {"team": "UK SMB Client Sales Key",         "leader": "Katie Brown",   "market": "UK"},
     # "Deanna Burgess"      → "Deanna Rota" (confirmed from live Salesforce data Sep 2026)
     # Remove the line below if Deanna Rota is a different person from Deanna Burgess.
-    "Deanna Rota"           : {"team": "Canada SMB Client Sales Key",     "leader": "Lesley Nunes",  "market": "Canada"},
+    "Deanna Rota"           : {"team": "Canada SMB Client Sales Key",     "leader": "Brian Veloso",  "market": "Canada"},
 }
 
 # Pre-build a lowercase-keyed lookup for fast, case-insensitive rep matching.
